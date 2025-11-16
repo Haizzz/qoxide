@@ -1,21 +1,12 @@
-use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use qoxide_lib::QoxideQueue;
 use std::hint::black_box;
 
-const QUEUE_SIZES: [u64; 2] = [100000, 1000000]; // 100K, 1M
 const LARGE_PAYLOAD_SIZE: usize = 1000000; // 1MB
-
-fn setup_queue(queue_size: u64, payload: &Vec<u8>) -> QoxideQueue {
-    let mut queue = black_box(QoxideQueue::new());
-    for _ in 0..queue_size {
-        queue.insert(black_box(payload.clone()));
-    }
-    queue
-}
 
 fn bench_queue_insert(c: &mut Criterion) {
     let mut group = c.benchmark_group("queue_insert");
-    group.throughput(Throughput::Elements(1000000));
+    group.throughput(Throughput::Elements(1));
     let mut queue = QoxideQueue::new();
     let payload = b"0".to_vec();
     group.bench_function("queue_insert", |b| {
@@ -28,5 +19,48 @@ fn bench_queue_insert(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_queue_insert,);
+fn bench_queue_reserve(c: &mut Criterion) {
+    let mut group = c.benchmark_group("queue_reserve");
+    let payload = b"0".to_vec();
+    group.throughput(Throughput::Elements(1));
+
+    for &queue_size in &[10_000, 100_000] {
+        group.bench_function(format!("reserve_queue({queue_size})"), |b| {
+            b.iter_batched(
+                || {
+                    let mut queue = QoxideQueue::new();
+                    for _ in 0..queue_size {
+                        queue.insert(payload.clone());
+                    }
+                    queue
+                },
+                |mut queue| {
+                    black_box(queue.reserve());
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+
+    let payload = vec![1; LARGE_PAYLOAD_SIZE];
+    for &queue_size in &[10_000, 100_000] {
+        group.bench_function(format!("reserve_queue({queue_size}_large_payload)"), |b| {
+            b.iter_batched(
+                || {
+                    let mut queue = QoxideQueue::new();
+                    for _ in 0..queue_size {
+                        queue.insert(payload.clone());
+                    }
+                    queue
+                },
+                |mut queue| {
+                    black_box(queue.reserve());
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+}
+
+criterion_group!(benches, bench_queue_insert, bench_queue_reserve);
 criterion_main!(benches);

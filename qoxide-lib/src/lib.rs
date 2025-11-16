@@ -51,7 +51,11 @@ impl QoxideQueue {
     }
 
     pub fn reserve(&mut self) -> Option<&Message> {
-        let message = self.queue.last_mut()?;
+        // TODO(anh): this scales with size
+        let message = self
+            .queue
+            .iter_mut()
+            .find(|m| m.state == MessageState::Pending)?;
         message.state = MessageState::Reserved;
         message.tries += 1;
         Some(message)
