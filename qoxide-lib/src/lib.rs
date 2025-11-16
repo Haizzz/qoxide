@@ -57,14 +57,14 @@ impl QoxideQueue {
         id
     }
 
-    pub fn reserve(&mut self) -> Option<&Vec<u8>> {
+    pub fn reserve(&mut self) -> Option<(Uuid, &Vec<u8>)> {
         let id = self.pending_ids.pop()?;
         let message = self.queue.get_mut(&id)?;
         message.state = MessageState::Reserved;
         message.tries += 1;
 
         let payload = &self.payloads[message.payload_index];
-        Some(payload)
+        Some((id, payload))
     }
 
     pub fn complete(&mut self, id: Uuid) -> bool {
