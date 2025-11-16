@@ -1,0 +1,3 @@
+[workspace]
+members = ["qoxide", "qoxide-lib"]
+resolver = "2"
