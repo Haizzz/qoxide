@@ -132,6 +132,7 @@ mod tests {
         assert!(completed);
     }
 
+    #[test]
     fn test_messages_can_be_dropped() {
         let mut queue = QoxideQueue::new();
         let payload = b"test".to_vec();
