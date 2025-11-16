@@ -51,12 +51,17 @@ impl QoxideQueue {
     pub fn new_with_path(path: &str) -> Self {
         let db = Connection::open(path).expect("Failed to open database connection");
         let queue = Self { db };
-        queue.init().expect("Failed to initialize database");
+        queue.init(path).expect("Failed to initialize database");
 
         queue
     }
 
-    fn init(&self) -> Result<(), Error> {
+    fn init(&self, path: &str) -> Result<(), Error> {
+        // Enable WAL mode for better concurrent access (only for file-based databases)
+        if path != ":memory:" {
+            self.db.execute_batch("PRAGMA journal_mode=WAL;")?;
+        }
+
         let init_schema_sql = include_str!("sql/init.sql");
         self.db.execute_batch(init_schema_sql)
     }
@@ -155,7 +160,7 @@ mod tests {
     fn test_messages_can_be_inserted() {
         let mut queue = QoxideQueue::new();
         let payload = b"test".to_vec();
-        queue.add(payload.clone());
+        queue.add(payload.clone()).expect("Failed to add message");
 
         assert_eq!(queue.size().unwrap().pending, 1);
     }
