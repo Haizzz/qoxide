@@ -62,7 +62,6 @@ impl QoxideQueue {
         let message = self.queue.get_mut(&id)?;
         message.state = MessageState::Reserved;
         message.tries += 1;
-        println!("Reserved message: {:?}", message);
 
         let payload = &self.payloads[message.payload_index];
         Some(payload)
