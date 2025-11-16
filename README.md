@@ -1,4 +1,4 @@
-# Qoxide Library
+# Qoxide
 
 A lightweight local job queue. 
 Guiding principles:
