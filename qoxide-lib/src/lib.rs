@@ -155,4 +155,34 @@ mod tests {
 
         assert!(queue.complete(id));
     }
+
+    #[test]
+    fn test_reserve_next_message() {
+        let mut queue = QoxideQueue::new();
+        let payload = b"test".to_vec();
+        queue.insert(payload.clone());
+        queue.insert(payload.clone());
+
+        queue.reserve().expect("Message should be found");
+        assert_eq!(queue.pending_ids.len(), 1);
+        assert_eq!(
+            queue
+                .queue
+                .iter()
+                .filter(|(_, m)| m.state == MessageState::Reserved)
+                .count(),
+            1
+        );
+
+        queue.reserve().expect("Message should be found");
+        assert_eq!(queue.pending_ids.len(), 0);
+        assert_eq!(
+            queue
+                .queue
+                .iter()
+                .filter(|(_, m)| m.state == MessageState::Reserved)
+                .count(),
+            2
+        );
+    }
 }
