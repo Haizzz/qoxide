@@ -1,9 +1,4 @@
-pub mod cli;
-
 use std::collections::HashMap;
-
-pub use cli::run;
-
 use uuid::Uuid;
 
 /**
@@ -31,6 +26,13 @@ pub struct Message {
     pub state: MessageState,
 }
 
+pub struct QueueSize {
+    total: usize,
+    pending: usize,
+    reserved: usize,
+    completed: usize,
+}
+
 impl QoxideQueue {
     pub fn new() -> Self {
         Self {
@@ -40,11 +42,25 @@ impl QoxideQueue {
         }
     }
 
-    pub fn size(&self) -> usize {
-        self.queue.len()
+    pub fn size(&self) -> QueueSize {
+        let mut reserved: usize = 0;
+        let mut completed: usize = 0;
+        for message in self.queue.values() {
+            if message.state == MessageState::Reserved {
+                reserved += 1;
+            } else if message.state == MessageState::Completed {
+                completed += 1;
+            }
+        }
+        QueueSize {
+            total: self.payloads.len(),
+            pending: self.pending_ids.len(),
+            reserved,
+            completed,
+        }
     }
 
-    pub fn insert(&mut self, payload: Vec<u8>) -> Uuid {
+    pub fn add(&mut self, payload: Vec<u8>) -> Uuid {
         let id = Uuid::new_v4();
         self.payloads.push(payload);
         let message = Message {
@@ -98,26 +114,35 @@ mod tests {
     #[test]
     fn test_queue_size() {
         let mut queue = QoxideQueue::new();
-        assert_eq!(queue.size(), 0);
+        let sizes = queue.size();
+        assert_eq!(sizes.total, 0);
+        assert_eq!(sizes.pending, 0);
+        assert_eq!(sizes.reserved, 0);
+        assert_eq!(sizes.completed, 0);
+
         let payload = b"test".to_vec();
-        queue.insert(payload.clone());
-        assert_eq!(queue.size(), 1);
+        queue.add(payload.clone());
+        let sizes = queue.size();
+        assert_eq!(sizes.total, 1);
+        assert_eq!(sizes.pending, 1);
+        assert_eq!(sizes.reserved, 0);
+        assert_eq!(sizes.completed, 0);
     }
 
     #[test]
     fn test_messages_can_be_inserted() {
         let mut queue = QoxideQueue::new();
         let payload = b"test".to_vec();
-        queue.insert(payload.clone());
+        queue.add(payload.clone());
 
-        assert_eq!(queue.size(), 1);
+        assert_eq!(queue.size().pending, 1);
     }
 
     #[test]
     fn test_messages_can_change_state() {
         let mut queue = QoxideQueue::new();
         let payload = b"test".to_vec();
-        let id = queue.insert(payload.clone());
+        let id = queue.add(payload.clone());
 
         let payload = queue.reserve().expect("Message should be found");
         assert_eq!(payload, payload);
@@ -160,8 +185,8 @@ mod tests {
     fn test_reserve_next_message() {
         let mut queue = QoxideQueue::new();
         let payload = b"test".to_vec();
-        queue.insert(payload.clone());
-        queue.insert(payload.clone());
+        queue.add(payload.clone());
+        queue.add(payload.clone());
 
         queue.reserve().expect("Message should be found");
         assert_eq!(queue.pending_ids.len(), 1);
