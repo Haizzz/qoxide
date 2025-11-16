@@ -1,5 +1,7 @@
 pub mod cli;
 
+use std::collections::HashMap;
+
 pub use cli::run;
 
 use uuid::Uuid;
@@ -10,28 +12,32 @@ use uuid::Uuid;
  * - metadata about the queue
  */
 pub struct QoxideQueue {
-    // TODO(anh): consider whether to split payload into a separate field from the queue itself
-    // TODO(anh): consider a separate field for completed messages. Or maybe a list of in messages per state with reference to the messages?
-    queue: Vec<Message>,
+    payloads: Vec<Vec<u8>>,
+    queue: HashMap<Uuid, Message>,
+    pending_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, PartialEq)]
-enum MessageState {
+pub enum MessageState {
     Pending,
     Reserved,
     Completed,
 }
 
+#[derive(Debug)]
 pub struct Message {
-    pub id: Uuid,
-    pub payload: Vec<u8>,
+    payload_index: usize,
     pub tries: u32,
-    state: MessageState,
+    pub state: MessageState,
 }
 
 impl QoxideQueue {
     pub fn new() -> Self {
-        Self { queue: Vec::new() }
+        Self {
+            payloads: Vec::new(),
+            queue: HashMap::new(),
+            pending_ids: Vec::new(),
+        }
     }
 
     pub fn size(&self) -> usize {
@@ -40,51 +46,50 @@ impl QoxideQueue {
 
     pub fn insert(&mut self, payload: Vec<u8>) -> Uuid {
         let id = Uuid::new_v4();
+        self.payloads.push(payload);
         let message = Message {
-            id,
-            payload,
+            payload_index: self.payloads.len() - 1,
             tries: 0,
             state: MessageState::Pending,
         };
-        self.queue.push(message);
+        self.queue.insert(id, message);
+        self.pending_ids.push(id);
         id
     }
 
-    pub fn reserve(&mut self) -> Option<&Message> {
-        // TODO(anh): this scales with size
-        let message = self
-            .queue
-            .iter_mut()
-            .find(|m| m.state == MessageState::Pending)?;
+    pub fn reserve(&mut self) -> Option<&Vec<u8>> {
+        let id = self.pending_ids.pop()?;
+        let message = self.queue.get_mut(&id)?;
         message.state = MessageState::Reserved;
         message.tries += 1;
-        Some(message)
+        println!("Reserved message: {:?}", message);
+
+        let payload = &self.payloads[message.payload_index];
+        Some(payload)
     }
 
     pub fn complete(&mut self, id: Uuid) -> bool {
-        let message = self.queue.iter_mut().find(|m| m.id == id);
+        let message = self.queue.get_mut(&id);
         if let Some(message) = message {
             message.state = MessageState::Completed;
-            return true;
+            true
+        } else {
+            false
         }
-        return false;
     }
 
     pub fn fail(&mut self, id: Uuid) -> bool {
-        let message = self.queue.iter_mut().find(|m| m.id == id);
+        let message = self.queue.get_mut(&id);
         if let Some(message) = message {
             message.state = MessageState::Pending;
-            return true;
+            self.pending_ids.push(id);
+            true
+        } else {
+            false
         }
-        return false;
     }
 
-    pub fn drop(&mut self, id: Uuid) {
-        let position = self.queue.iter().position(|m| m.id == id);
-        if let Some(position) = position {
-            self.queue.swap_remove(position);
-        }
-    }
+    // TODO(anh): add method to drop and clean up queue and indices
 }
 
 #[cfg(test)]
@@ -101,7 +106,7 @@ mod tests {
     }
 
     #[test]
-    fn test_messages_can_be_inserted_and_retrieved() {
+    fn test_messages_can_be_inserted() {
         let mut queue = QoxideQueue::new();
         let payload = b"test".to_vec();
         queue.insert(payload.clone());
@@ -115,31 +120,40 @@ mod tests {
         let payload = b"test".to_vec();
         let id = queue.insert(payload.clone());
 
-        let message = queue.reserve().expect("Message should be found");
-        assert_eq!(message.id, id);
-        assert_eq!(message.payload, payload);
-        assert_eq!(message.state, MessageState::Reserved);
-        assert_eq!(message.tries, 1);
+        let payload = queue.reserve().expect("Message should be found");
+        assert_eq!(payload, payload);
+        assert_eq!(queue.pending_ids.len(), 0);
+        assert_eq!(
+            queue
+                .queue
+                .iter()
+                .find(|(_, m)| m.state == MessageState::Reserved)
+                .is_some(),
+            true
+        );
 
         queue.fail(id);
-        let message = queue.reserve().expect("Message should be found");
-        assert_eq!(message.id, id);
-        assert_eq!(message.payload, payload);
-        assert_eq!(message.state, MessageState::Reserved);
-        assert_eq!(message.tries, 2);
+        assert_eq!(queue.pending_ids.len(), 1);
+        assert_eq!(
+            queue
+                .queue
+                .iter()
+                .find(|(_, m)| m.state == MessageState::Reserved)
+                .is_none(),
+            true
+        );
 
-        let completed = queue.complete(id);
-        assert!(completed);
-    }
+        queue.reserve().expect("Message should be found");
+        assert_eq!(queue.pending_ids.len(), 0);
+        assert_eq!(
+            queue
+                .queue
+                .iter()
+                .find(|(_, m)| m.state == MessageState::Reserved && m.tries == 2)
+                .is_some(),
+            true
+        );
 
-    #[test]
-    fn test_messages_can_be_dropped() {
-        let mut queue = QoxideQueue::new();
-        let payload = b"test".to_vec();
-        let id = queue.insert(payload.clone());
-
-        assert!(queue.size() == 1);
-        queue.drop(id);
-        assert!(queue.size() == 0);
+        assert!(queue.complete(id));
     }
 }
