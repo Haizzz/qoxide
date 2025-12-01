@@ -10,3 +10,6 @@ CREATE TABLE IF NOT EXISTS payloads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     data BLOB NOT NULL
 );
+
+-- Index on state for efficient filtering and grouping
+CREATE INDEX IF NOT EXISTS idx_messages_state ON messages(state);
