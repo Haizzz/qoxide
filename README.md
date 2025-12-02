@@ -25,7 +25,7 @@ qoxide = "1.0"
 
 ### Basic Example
 ```rust
-use qoxide_lib::QoxideQueue;
+use qoxide::QoxideQueue;
 
 // Create an in-memory queue
 let mut queue = QoxideQueue::new();
