@@ -18,7 +18,7 @@ A lightweight local job queue built in Rust, backed by SQLite.
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-qoxide-lib = { path = "qoxide-lib" }
+qoxide = "1.0"
 ```
 
 ## Usage
@@ -130,7 +130,6 @@ The `reserve()` operation is atomic - it selects and updates the message state i
 
 Run benchmarks with:
 ```bash
-cd qoxide-lib
 cargo bench
 ```
 
