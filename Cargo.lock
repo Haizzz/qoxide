@@ -364,7 +364,7 @@ dependencies = [
 
 [[package]]
 name = "qoxide"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "criterion",
  "rusqlite",
