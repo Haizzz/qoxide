@@ -149,6 +149,18 @@ cargo test
 cargo bench
 ```
 
+## Roadmap
+
+- [ ] Visibility timeout (auto-return reserved messages after timeout)
+- [ ] Retry count / max attempts
+- [ ] Dead letter queue (DLQ)
+- [ ] Delayed/scheduled messages
+- [ ] Priority queues
+- [ ] Message TTL / expiration
+- [ ] Batch operations
+- [ ] Message deduplication
+- [ ] Cleanup/purge completed messages
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
