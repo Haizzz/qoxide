@@ -131,7 +131,12 @@ impl QoxideQueue {
         Ok(())
     }
 
-    // TODO(anh): add method to drop and clean up queue and indices
+    // TODO(anh): add method to
+    // drop
+    // retry count
+    // clean up queue and indices
+    // dead letter queue
+    // message priorities
 }
 
 #[cfg(test)]
