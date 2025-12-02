@@ -1,5 +1,5 @@
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use qoxide_lib::QoxideQueue;
+use qoxide::QoxideQueue;
 use std::hint::black_box;
 
 const LARGE_PAYLOAD_SIZE: usize = 1000000; // 1MB
