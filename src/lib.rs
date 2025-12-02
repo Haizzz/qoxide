@@ -90,7 +90,10 @@ impl QoxideQueue {
 
     fn init(&self, path: &str) -> Result<(), Error> {
         if path != ":memory:" {
-            self.db.execute_batch("PRAGMA journal_mode=WAL;")?;
+            self.db.execute_batch(
+                "PRAGMA journal_mode=WAL;
+                 PRAGMA busy_timeout=5000;",
+            )?;
         }
 
         let init_schema_sql = include_str!("sql/init.sql");
