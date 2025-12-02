@@ -39,18 +39,6 @@ pub enum MessageState {
 }
 
 impl MessageState {
-    /// Parses a state from its string representation.
-    ///
-    /// Valid values: `"PENDING"`, `"RESERVED"`, `"COMPLETED"`.
-    pub fn from_str(s: &str) -> Result<Self, String> {
-        match s {
-            "PENDING" => Ok(MessageState::Pending),
-            "RESERVED" => Ok(MessageState::Reserved),
-            "COMPLETED" => Ok(MessageState::Completed),
-            _ => Err(format!("Invalid state: {}", s)),
-        }
-    }
-
     /// Returns the string representation of the state.
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -72,6 +60,12 @@ pub struct QueueSize {
     pub reserved: usize,
     /// Number of successfully processed messages.
     pub completed: usize,
+}
+
+impl Default for QoxideQueue {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QoxideQueue {
