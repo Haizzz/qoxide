@@ -176,14 +176,14 @@ impl QoxideQueue {
             )?;
         }
 
-        let init_schema_sql = include_str!("sql/init.sql");
-        self.db.execute_batch(init_schema_sql)
+        self.db.execute_batch(include_str!("init.sql"))
     }
 
     /// Returns the count of messages in each state.
     pub fn size(&self) -> Result<QueueSize, Error> {
-        let sql = include_str!("sql/get_size.sql");
-        let mut statement = self.db.prepare_cached(sql)?;
+        let mut statement = self
+            .db
+            .prepare_cached("SELECT state, COUNT(1) AS count FROM messages GROUP BY state")?;
         let mut rows = statement.query([])?;
         let mut total: usize = 0;
         let mut sizes = QueueSize {
@@ -240,18 +240,33 @@ impl QoxideQueue {
     /// Returns the message ID and payload. The message state changes from `Pending` to `Reserved`.
     /// Returns an error if no pending messages are available.
     pub fn reserve(&mut self) -> Result<(i64, Vec<u8>), Error> {
-        self.db
-            .query_one(include_str!("sql/reserve.sql"), [], |row| {
-                let id: i64 = row.get(0)?;
-                let payload: Vec<u8> = row.get(1)?;
-                Ok((id, payload))
-            })
+        let tx = self.db.transaction()?;
+
+        let (id, payload_id): (i64, i64) = tx.query_row(
+            "SELECT id, payload_id FROM messages WHERE state = 'PENDING' LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+
+        tx.execute(
+            "UPDATE messages SET state = 'RESERVED' WHERE id = ?",
+            params![id],
+        )?;
+
+        let payload: Vec<u8> = tx.query_row(
+            "SELECT data FROM payloads WHERE id = ?",
+            params![payload_id],
+            |row| row.get(0),
+        )?;
+
+        tx.commit()?;
+        Ok((id, payload))
     }
 
     /// Marks a reserved message as successfully completed.
     pub fn complete(&self, id: i64) -> Result<(), Error> {
         self.db.execute(
-            include_str!("sql/set_message_state.sql"),
+            "UPDATE messages SET state = ? WHERE id = ?",
             params![MessageState::Completed.as_str(), id],
         )?;
         Ok(())
