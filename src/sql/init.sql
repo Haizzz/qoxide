@@ -2,8 +2,8 @@ CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     state TEXT NOT NULL,
     payload_id INTEGER NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (payload_id) REFERENCES payloads (id)
-    -- TODO(anh): maybe created and updated timestamp
 );
 
 CREATE TABLE IF NOT EXISTS payloads (

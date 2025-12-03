@@ -34,12 +34,12 @@ fn bench_queue_reserve(c: &mut Criterion) {
                     || {
                         let mut queue = QoxideQueue::new();
                         for _ in 0..queue_size {
-                            queue.add(black_box(payload.clone()));
+                            let _ = queue.add(black_box(payload.clone()));
                         }
                         queue
                     },
                     |mut queue| {
-                        black_box(queue.reserve());
+                        let _ = black_box(queue.reserve());
                     },
                     BatchSize::LargeInput,
                 );
@@ -57,11 +57,11 @@ fn bench_queue_interactions(c: &mut Criterion) {
     let payload = b"0".to_vec();
     group.bench_function("queue_interactions", |b| {
         b.iter(|| {
-            queue.add(black_box(payload.clone()));
+            let _ = queue.add(black_box(payload.clone()));
             let (id, _) = queue.reserve().expect("Message should be found");
-            queue.fail(id);
+            let _ = queue.fail(id);
             let (id, _) = queue.reserve().expect("Message should be found");
-            queue.complete(id);
+            let _ = queue.complete(id);
         })
     });
 }

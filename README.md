@@ -12,6 +12,7 @@ A lightweight local job queue built in Rust, backed by SQLite.
 - SQLite backend with WAL mode for file-based queues
 - Binary payload support (arbitrary `Vec<u8>`)
 - Atomic reserve-complete/fail workflow
+- Configurable max attempts with dead letter queue
 
 ## Installation
 
@@ -31,11 +32,10 @@ use qoxide::QoxideQueue;
 let mut queue = QoxideQueue::new();
 
 // Add a message
-let payload = b"my job data".to_vec();
-let message_id = queue.add(payload)?;
+let id = queue.add(b"my job data".to_vec())?;
 
 // Reserve the next pending message (atomic)
-let (id, data) = queue.reserve()?;
+let (id, payload) = queue.reserve()?;
 
 // Process the job...
 
@@ -43,13 +43,37 @@ let (id, data) = queue.reserve()?;
 queue.complete(id)?;
 
 // Or mark as failed to return to pending state
-// queue.fail(id)?;
+queue.fail(id)?;
 ```
 
-### Persistent Queue
+### With Builder
 ```rust
-// Create a file-backed queue with WAL mode
-let mut queue = QoxideQueue::new_with_path("./my_queue.db");
+use qoxide::QoxideQueue;
+
+// Configure with builder pattern
+let mut queue = QoxideQueue::builder()
+    .path("./my_queue.db")  // optional: file-backed persistence
+    .max_attempts(3)         // optional: move to DLQ after 3 failed attempts
+    .build();
+
+let id = queue.add(b"job".to_vec())?;
+let (id, _) = queue.reserve()?;
+
+// After 3 failed attempts, message moves to DLQ
+let state = queue.fail(id)?;
+
+// Inspect dead letters
+let dead_ids = queue.dead_letters()?;
+for id in &dead_ids {
+    let payload = queue.get(*id)?;
+    // Process dead letter...
+}
+
+// Requeue or remove dead letters
+queue.requeue_dead_letters(&dead_ids)?;
+for id in dead_ids {
+    queue.remove(id)?;
+}
 ```
 
 ### Queue Inspection
@@ -59,6 +83,7 @@ println!("Total: {}", sizes.total);
 println!("Pending: {}", sizes.pending);
 println!("Reserved: {}", sizes.reserved);
 println!("Completed: {}", sizes.completed);
+println!("Dead: {}", sizes.dead);
 ```
 
 ## API Reference
@@ -66,12 +91,19 @@ println!("Completed: {}", sizes.completed);
 | Method | Description |
 |--------|-------------|
 | `QoxideQueue::new()` | Create in-memory queue |
-| `QoxideQueue::new_with_path(path)` | Create file-backed queue |
-| `add(payload: Vec<u8>)` | Add message, returns message ID |
+| `QoxideQueue::builder()` | Create queue with builder pattern |
+| `builder.path(path)` | Set file path for persistence |
+| `builder.max_attempts(n)` | Set max attempts before DLQ |
+| `builder.build()` | Build the queue |
+| `add(payload)` | Add message, returns message ID |
 | `reserve()` | Atomically reserve next pending message |
 | `complete(id)` | Mark message as completed |
-| `fail(id)` | Return message to pending state |
+| `fail(id)` | Fail message (requeue or move to DLQ) |
+| `get(id)` | Get payload by message ID |
+| `remove(id)` | Remove a message permanently |
 | `size()` | Get queue size breakdown by state |
+| `dead_letters()` | Get IDs of all dead letter messages |
+| `requeue_dead_letters(&[ids])` | Move dead letters back to pending |
 
 ## Message States
 
@@ -80,12 +112,16 @@ PENDING → RESERVED → COMPLETED
             ↓
          (fail)
             ↓
-         PENDING
+    ┌───────┴───────┐
+    ↓               ↓
+ PENDING          DEAD
+(retry)      (max retries)
 ```
 
 - **Pending**: Message is waiting to be processed
 - **Reserved**: Message is being processed by a worker
 - **Completed**: Message has been successfully processed
+- **Dead**: Message exceeded max attempts (dead letter queue)
 
 ## Behaviour
 
@@ -99,15 +135,18 @@ The `reserve()` operation is atomic - it selects and updates the message state i
 - **In-memory** (`:memory:`): Data is lost when the queue is dropped
 - **File-backed**: Uses SQLite WAL mode for better concurrent read performance
 
+### Attempts
+- No limit (default): `fail()` always returns message to pending
+- With max attempts: `fail()` moves message to DLQ after `n` failed attempts
+
 ## Limitations
 
 - **Write contention**: SQLite allows only one writer at a time. Multi-process access works but may block under heavy write load
 - **No visibility timeout**: Reserved messages stay reserved forever until explicitly completed or failed. If a worker crashes, messages must be manually recovered
-- **No dead letter queue**: Failed messages return to pending state indefinitely
 - **No message priorities**: Strictly FIFO ordering
 - **No delayed/scheduled messages**: Messages are immediately available
 - **No TTL/expiration**: Messages never expire automatically
-- **Completed messages are not cleaned up**: The `complete()` method marks messages as completed but doesn't delete them. Requires manual cleanup
+- **Completed messages are not cleaned up**: Use `remove()` to clean up
 
 ## Scaling
 
@@ -151,15 +190,15 @@ cargo bench
 
 ## Roadmap
 
+- [x] Retry count / max attempts
+- [x] Dead letter queue (DLQ)
 - [ ] Visibility timeout (auto-return reserved messages after timeout)
-- [ ] Retry count / max attempts
-- [ ] Dead letter queue (DLQ)
 - [ ] Delayed/scheduled messages
 - [ ] Priority queues
 - [ ] Message TTL / expiration
 - [ ] Batch operations
 - [ ] Message deduplication
-- [ ] Cleanup/purge completed messages
+- [ ] Named queues
 
 ## License
 
